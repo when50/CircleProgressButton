@@ -95,12 +95,12 @@ open class CircleProgressButton: UIView {
     }
 
     // MARK: Properties
-
     open var defaultImage: UIImage?
     open var inProgressImage: UIImage?
     open var suspendedImage: UIImage?
     open var completedImage: UIImage?
     open var inProgressStrokeColor: UIColor?
+    open var progressRailStrokeColor: UIColor?
     open var suspendedStrokeColor: UIColor?
     open var completedStrokeColor: UIColor?
     open var strokeMode: StrokeMode = .fill
@@ -142,24 +142,29 @@ open class CircleProgressButton: UIView {
     }
 
     open var isDebugEnabled: Bool = false
+    open var userDefinedCircleWidth: CGFloat? = nil   // 用户定义进度宽度，就是进度的圆的直径
 
     public private(set) var state: State = .default {
         didSet {
             updateImageIfNeeded(for: state)
             switch state {
             case .default:
+                progressRailLayer.isHidden = true
                 if let color = inProgressStrokeColor?.cgColor {
                     progressLayer.strokeColor = color
                 }
             case .inProgress:
+                progressRailLayer.isHidden = false
                 if let color = inProgressStrokeColor?.cgColor {
                     progressLayer.strokeColor = color
                 }
             case .suspended:
+                progressRailLayer.isHidden = false
                 if let color = suspendedStrokeColor?.cgColor {
                     progressLayer.strokeColor = color
                 }
             case .completed:
+                progressRailLayer.isHidden = true
                 if let color = completedStrokeColor?.cgColor {
                     progressLayer.strokeColor = color
                 }
@@ -178,6 +183,7 @@ open class CircleProgressButton: UIView {
     private let animationLock = NSRecursiveLock()
     private var tapBlocks: [(Int, OnTapBlock)] = []
     private let progressLayer = CAShapeLayer()
+    private let progressRailLayer = CAShapeLayer()
 
     private let imageView: UIImageView = {
         let imageView = UIImageView()
@@ -246,7 +252,11 @@ open class CircleProgressButton: UIView {
         // tapGesture
         tapGesture.addTarget(self,  action: #selector(tap))
         self.addGestureRecognizer(tapGesture)
-
+        
+        // progressRailLayer
+        progressRailLayer.cornerRadius = self.layer.cornerRadius
+        progressRailLayer.contentsScale = UIScreen.main.scale
+        self.layer.addSublayer(progressRailLayer)
         // progressLayer
         progressLayer.cornerRadius = self.layer.cornerRadius
         progressLayer.contentsScale = UIScreen.main.scale
@@ -317,7 +327,7 @@ open class CircleProgressButton: UIView {
             queuedPrintln("[updateCircleProgress] state: \(state), progress: \(progress)")
         }
 
-        let circleWidth = self.layer.bounds.size.width
+        let circleWidth = userDefinedCircleWidth ?? self.layer.bounds.size.width
 
         if circleWidth == 0 {
             assertionFailure("circleWidth is unexpectedly zero.")
@@ -326,7 +336,24 @@ open class CircleProgressButton: UIView {
         if progressLayer.frame == .zero {
             progressLayer.frame = self.bounds
         }
-
+        
+        if let color = progressRailStrokeColor {
+            progressRailLayer.frame = progressLayer.frame
+            progressRailLayer.fillColor = UIColor.clear.cgColor
+            progressRailLayer.strokeColor = color.cgColor
+            progressRailLayer.lineWidth = userDefinedStrokeWidth ?? (circleWidth / 2)
+            progressRailLayer.path = circlePath(circleWidth, strokeWidth: userDefinedStrokeWidth, arcCenter: progressLayer.position)
+            if let (pattern, offset) = dashedPatterns {
+                progressRailLayer.lineDashPattern = pattern
+                progressRailLayer.lineDashPhase = offset
+            } else {
+                progressRailLayer.lineDashPattern = []
+                progressRailLayer.lineDashPhase = 0
+            }
+            progressRailLayer.strokeStart = 0.0
+            progressRailLayer.strokeEnd = 1.0
+        }
+        
         progressLayer.fillColor = UIColor.clear.cgColor
         progressLayer.lineWidth = userDefinedStrokeWidth ?? (circleWidth / 2)
         progressLayer.path = circlePath(circleWidth, strokeWidth: userDefinedStrokeWidth, arcCenter: progressLayer.position)
